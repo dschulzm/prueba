@@ -33,7 +33,6 @@ def main():
     params['n_templates'] = 4
     params['display_labels'] = ['d', 'b', 'p', 's']
     train_siamese_network(**params)
-    exit()
 
     params['path_train'] = list()
     params['path_train'].append('/home/dschulz/TOC/fakeid/datasets/segmented/mex1/train_150_negs.txt')
