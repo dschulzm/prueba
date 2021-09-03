@@ -7,7 +7,7 @@ import time
 
 
 def main():
-    eval_path = '/home/dschulz/TOC/siameseNetwork/models/kk3'
+    eval_path = '/home/dschulz/TOC/siameseNetwork/models/finishedTrainingsTripletLoss/test_mex1'
     models_path = list()
     for path, subdirs, files in os.walk(eval_path):
         for name in files:
@@ -15,6 +15,7 @@ def main():
                 models_path.append(path)
     models_path.sort()
 
+    results_dir = 'results'
     results_file = open('results.csv', 'wt', buffering=1)
     delimiter = ';'
     for n, model_path in enumerate(models_path):
@@ -29,9 +30,11 @@ def main():
         add_params_dict = dict()
         add_params_dict['description'] = params['description'] if 'description' in params.keys() else ''
         add_params_dict['backbone'] = params['backbone']
-        add_params_dict['backbone_params'] = [x + ': '+str(params['backbone_params'][x]) for x in params['backbone_params'].keys()] if 'backbone_params' in params.keys() else ''
+        # add_params_dict['backbone_params'] = [x + ': '+str(params['backbone_params'][x]) for x in params['backbone_params'].keys()] if 'backbone_params' in params.keys() else ''
+        add_params_dict['backbone_params'] = params['backbone_params'] if 'backbone_params' in params.keys() else None
+        add_params_dict['data_augmentation'] = params['data_augmentation'] if 'data_augmentation' in params.keys() else None
 
-        results_path = os.path.join(model_path, 'results/results.json')
+        results_path = os.path.join(model_path, results_dir, 'results.json')
         if os.path.exists(results_path):
             with open(results_path) as f:
                 results = json.load(f)
@@ -43,7 +46,7 @@ def main():
             display_labels = params['display_labels'] if 'display_labels' in params.keys() else ['d', 'b', 'p', 's']
 
             eval_siamese_network(model_path, path_templates, params['path_test'], n_templates, display_labels,
-                                 os.path.join(model_path, 'results'))
+                                 os.path.join(model_path, results_dir))
 
             tf.keras.backend.clear_session()
             with open(results_path) as f:
@@ -61,11 +64,9 @@ def main():
         # Write experiment results
         line = ''
         for key in results.keys():
-            line += '%s%s' % (str(results[key]), delimiter)
+            line += '%s%s' % (str(results[key]).rstrip('}').lstrip('{'), delimiter)
         line = line.rstrip(delimiter) + '\n'
         results_file.write(line)
-
-        print(results)
 
     results_file.close()
 

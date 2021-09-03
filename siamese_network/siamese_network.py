@@ -1,4 +1,7 @@
 import os
+import sys
+sys.path.append('/home/dschulz/TOC/aikit/')
+# from aikit.metrics import iso_30107_3, scores, det_curve
 
 import cv2
 import tensorflow as tf
@@ -17,7 +20,9 @@ import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import json
 import socket
+import metrics as metrics_dschulz
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
@@ -157,6 +162,54 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     results['thresholds'] = thresholds[best_ndx]
     results['auc'] = auc
 
+    # ISO 30107-3 Metrics
+    # distances = np.clip(distances, 0, 1)
+    # atk_scores, bf_scores, atk_true, bf_true = scores.split_scores(test_labels, 1 - distances, bonafide_label=0)
+    # apcer_pais = iso_30107_3.apcer_pais(atk_true, atk_scores)
+    # results['apcer_pais'] = str(apcer_pais)
+    # apcer_max = iso_30107_3.apcer_max(atk_true, atk_scores)
+    # results['apcer_max'] = apcer_max
+    # bpcer = iso_30107_3.bpcer(bf_scores)
+    # results['bpcer'] = bpcer
+    # apcer_, bpcer_, thresholds_ = det_curve.det_curve(atk_scores, bf_scores, False)
+    # eer, eer_threshold = det_curve.eer(apcer_, bpcer_, thresholds_)
+    # results['eer'] = eer
+    # results['eer_threshold'] = eer_threshold
+    #
+    # bpcer_10 = iso_30107_3.bpcer_ap(bf_scores, apcer_, thresholds_, 10)
+    # bpcer_20 = iso_30107_3.bpcer_ap(bf_scores, apcer_, thresholds_, 20)
+    # bpcer_100 = iso_30107_3.bpcer_ap(bf_scores, apcer_, thresholds_, 100)
+    # print('bpcer_10', 'bpcer_20', 'bpcer_100')
+    # print(bpcer_10, bpcer_20, bpcer_100)
+
+    distances = np.clip(distances, 0, 1)
+    # metrics_dschulz.det_curve_new(test_labels, 1 - distances)
+    ap_eval = [10, 20, 100]
+    apcer_pais = dict()
+    eer_pais = dict()
+    bpcer_ap_pais = dict()
+    det_values = metrics_dschulz.det_curve(test_labels, 1-distances)
+    for pais in det_values:
+        lbl_atk = pais.pop('lbl_atk')
+        eer, eer_threshold = metrics_dschulz.eer(**pais)
+        apcer = metrics_dschulz.apcer(pais['fpr'], pais['thresholds'])
+        bpcer = metrics_dschulz.bpcer(pais['fnr'], pais['thresholds'])
+        apcer_pais[lbl_atk] = apcer
+        eer_pais[lbl_atk] = eer
+        bpcer_ap_pais[lbl_atk] = dict()
+        for ap in ap_eval:
+            bpcer_ap, ap_threshold = metrics_dschulz.bpcer_ap(**{**pais, **{'ap': ap}})
+            bpcer_ap_pais[lbl_atk]['bpcer' + str(ap)] = bpcer_ap
+        #     print('BPCER' + str(ap) + ': ' + str(bpcer_ap))
+        # print('--------------------')
+    results['apcer_pais'] = str(apcer_pais)
+    results['bpcer'] = bpcer
+    worst_pais = max(eer_pais, key=eer_pais.get)
+    results['eer'] = eer_pais[worst_pais]
+    for key in bpcer_ap_pais[worst_pais]:
+        results[key] = bpcer_ap_pais[worst_pais][key]
+    # metrics_dschulz.det_curve_new(test_labels, 1 - distances)
+
     test_feat = model.predict(dataset_test)
     plot_tsne(test_feat, test_labels, labels=display_labels, path_save=os.path.join(results_path, 'tsne_2d.jpg'))
 
@@ -202,6 +255,12 @@ def augment_images(images, seq_name='seq_color'):
 
 
 def train_siamese_network(**params):
+    # Set seeds for repeatability
+    seed = 0
+    np.random.seed(seed)
+    random.seed(seed)
+    tf.random.set_seed(seed)
+
     input_shape = params['input_shape']
     batch_size = params['batch_size']
     weights = params['weights']
@@ -259,8 +318,11 @@ def train_siamese_network(**params):
         n_samples_val = len(dataset_val)
         params['n_samples_val'] = n_samples_val
         dataset_val = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_val])
-        dataset_val = dataset_val.map(lambda x: parse_image(x, input_shape, preprocessor),
-                                      num_parallel_calls=AUTOTUNE).batch(batch_size).prefetch(AUTOTUNE)
+        # dataset_val = dataset_val.map(lambda x: parse_image(x, input_shape, preprocessor),
+        #                               num_parallel_calls=AUTOTUNE).batch(batch_size).prefetch(AUTOTUNE)
+        dataset_val = dataset_val.map(lambda x: load_image(x, input_shape),
+                                      num_parallel_calls=AUTOTUNE).batch(batch_size).map(
+            lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
 
     learning_rate = params['optimizer_params']['learning_rate']
     if params['optimizer'] == 'adam':
@@ -331,4 +393,3 @@ def train_siamese_network(**params):
         tf.keras.backend.clear_session()
     # log.close()
     plt.clf()
-

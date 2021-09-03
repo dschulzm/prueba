@@ -19,8 +19,8 @@ def main():
     # params['backbone'] = 'resnet50'
     # params['unfreeze_from'] = 'conv5_block1_1_conv'
     params['input_shape'] = (224, 224, 3)
-    params['batch_size'] = 64
-    params['epochs'] = 2
+    params['batch_size'] = 128
+    params['epochs'] = 100
     params['weights'] = 'imagenet' # None, 'imagenet'
     params['optimizer'] = 'adam'
     # params['optimizer_params'] = {'learning_rate': 1e-5}
