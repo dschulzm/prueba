@@ -17,9 +17,12 @@ def det_curve(y_true, y_score, pos_label=0):
         fpr, tpr, thresholds = metrics.roc_curve(y_true_eval, y_score_eval, drop_intermediate=False)
         out_atk = dict()
         out_atk['lbl_atk'] = lbl_atk
-        out_atk['fpr'] = fpr[1:]
-        out_atk['fnr'] = 1 - tpr[1:]
-        out_atk['thresholds'] = thresholds[1:]
+        # out_atk['fpr'] = fpr[1:]
+        # out_atk['fnr'] = 1 - tpr[1:]
+        # out_atk['thresholds'] = thresholds[1:]
+        out_atk['fpr'] = fpr
+        out_atk['fnr'] = 1 - tpr
+        out_atk['thresholds'] = thresholds
         out.append(out_atk)
 
     return out
@@ -36,7 +39,7 @@ def bpcer(fnr, thresholds, threshold_eval=0.5):
 
 
 def eer(fpr, fnr, thresholds):
-    step_sampling = 0.00001
+    step_sampling = 0.000005
     thresh_sampling = np.arange(0, thresholds.max(), step_sampling)
     f_apcer = interp1d(thresholds, fpr)
     apcer = f_apcer(thresh_sampling)
@@ -48,7 +51,7 @@ def eer(fpr, fnr, thresholds):
 
 
 def bpcer_ap(fpr, fnr, thresholds, ap):
-    step_sampling = 0.00001
+    step_sampling = 0.000005
     thresh_sampling = np.arange(0, thresholds.max(), step_sampling)
     f_apcer = interp1d(thresholds, fpr)
     apcer = f_apcer(thresh_sampling)
