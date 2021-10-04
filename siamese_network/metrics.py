@@ -40,7 +40,7 @@ def bpcer(fnr, thresholds, threshold_eval=0.5):
 
 def eer(fpr, fnr, thresholds):
     step_sampling = 0.000005
-    thresh_sampling = np.arange(0, thresholds.max(), step_sampling)
+    thresh_sampling = np.arange(thresholds.min(), thresholds.max(), step_sampling)
     f_apcer = interp1d(thresholds, fpr)
     apcer = f_apcer(thresh_sampling)
     f_bpcer = interp1d(thresholds, fnr)
@@ -52,7 +52,7 @@ def eer(fpr, fnr, thresholds):
 
 def bpcer_ap(fpr, fnr, thresholds, ap):
     step_sampling = 0.000005
-    thresh_sampling = np.arange(0, thresholds.max(), step_sampling)
+    thresh_sampling = np.arange(thresholds.min(), thresholds.max(), step_sampling)
     f_apcer = interp1d(thresholds, fpr)
     apcer = f_apcer(thresh_sampling)
     f_bpcer = interp1d(thresholds, fnr)
