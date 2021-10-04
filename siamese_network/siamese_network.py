@@ -182,6 +182,36 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     # print('bpcer_10', 'bpcer_20', 'bpcer_100')
     # print(bpcer_10, bpcer_20, bpcer_100)
 
+    from pyeer.eer_info import get_eer_stats
+    from pyeer.report import generate_eer_report, export_error_rates
+    from pyeer.plot import plot_eer_stats
+
+    # Calculating stats for classifier A
+    from aikit.metrics import iso_30107_3, scores, det_curve
+    distances = np.clip(distances, 0, 1)
+    atk_scores, bf_scores, atk_true, bf_true = scores.split_scores(test_labels, 1 - distances, bonafide_label=0)
+
+    data_pais = list()
+    for lbl_atk in np.unique(atk_true):
+        atk_scores_pais = atk_scores[atk_true == lbl_atk]
+        print(len(atk_scores_pais))
+        stats = get_eer_stats(bf_scores, atk_scores_pais)
+
+        data = dict()
+        data['lbl_atk'] = lbl_atk
+        data['eer_stats'] = stats.eer
+        data['eer_low'] = stats.eer_low
+        data['eer_high'] = stats.eer_high
+        data['fmr10'] = stats.fmr10
+        data['fmr20'] = stats.fmr20
+        data['fmr100'] = stats.fmr100
+        data_pais.append(data)
+
+    worst_pais = max(data_pais, key=lambda x: x['eer_high'])
+    print(worst_pais)
+    worst_pais.pop('lbl_atk')
+    results = {**worst_pais, **results}
+
     distances = np.clip(distances, 0, 1)
     # metrics_dschulz.det_curve_new(test_labels, 1 - distances)
     ap_eval = [10, 20, 100]
