@@ -8,7 +8,7 @@ import tensorflow as tf
 import numpy as np
 import random
 from datetime import datetime
-from tensorflow.keras.applications import mobilenet_v2, resnet50
+from tensorflow.keras.applications import mobilenet_v2, resnet50, resnet
 # import cv2
 from tensorflow.keras.models import Model, load_model
 import time
@@ -281,6 +281,14 @@ def train_siamese_network(**params):
         backbone_model = resnet50.ResNet50(include_top=True, input_shape=input_shape, weights=weights)
         backbone_model = Model(inputs=backbone_model.input, outputs=backbone_model.layers[-2].output)
         preprocessor = resnet50.preprocess_input
+    elif params['backbone'] == 'resnet101':
+        backbone_model = resnet.ResNet101(include_top=True, input_shape=input_shape, weights=weights)
+        backbone_model = Model(inputs=backbone_model.input, outputs=backbone_model.layers[-2].output)
+        preprocessor = resnet.preprocess_input
+    elif params['backbone'] == 'resnet152':
+        backbone_model = resnet.ResNet152(include_top=True, input_shape=input_shape, weights=weights)
+        backbone_model = Model(inputs=backbone_model.input, outputs=backbone_model.layers[-2].output)
+        preprocessor = resnet.preprocess_input
     # elif params['backbone'] == 'mobilenetv2_small':
     #     # preprocessor = mobilenet_v3.preprocess_input
     # elif params['backbone'] == 'mobilenetv2_large':
