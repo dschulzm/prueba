@@ -108,10 +108,14 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
         backbone = params['backbone']
         input_shape = params['input_shape']
 
-    if backbone == 'resnet50':
-        preprocessor = resnet50.preprocess_input
-    elif backbone == 'mobilenet_v2':
+    if backbone == 'mobilenet_v2':
         preprocessor = mobilenet_v2.preprocess_input
+    elif backbone == 'resnet50':
+        preprocessor = resnet50.preprocess_input
+    elif backbone == 'resnet101':
+        preprocessor = resnet.preprocess_input
+    elif backbone == 'resnet152':
+        preprocessor = resnet.preprocess_input
     else:
         preprocessor = mobilenet_v2.preprocess_input
 
