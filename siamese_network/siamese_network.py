@@ -20,6 +20,7 @@ import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import json
 import socket
+import augmentations
 import metrics as metrics_dschulz
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
@@ -241,19 +242,29 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     return results
 
 
+def imgaug_augment(images):
+    sequence = augmentations.build_augmentation_sequence_heavy()
+    # self.augmentation_sequence.seed = self.rng.integers(0, 2 ** 16)
+    images = tf.cast(images, tf.uint8).numpy()
+    images = sequence.augment_images(images)
+    return tf.cast(images, tf.float32)
+
+
 def augment_images(images, seq_name='seq_color'):
     if seq_name == 'seq_color':
         ops = [[tf.image.random_contrast, dict(lower=0.3, upper=1.25)],
                [tf.image.random_hue, dict(max_delta=0.15)],
                [tf.image.random_saturation, dict(lower=0.25, upper=3)],
                [tf.image.adjust_gamma, dict(gamma=(2 * np.random.random() + 1) ** [-1, 1][np.random.randint(2)])]]
-    elif seq_name == 'seq_test':
-        ops = []
+        ndx_op = np.random.randint(0, len(ops))
+        images_aug = ops[ndx_op][0](**{**dict(image=images), **ops[ndx_op][1]})
+    elif seq_name == 'imgaug_heavy':
+        # seq = augmentations.build_augmentation_sequence_heavy()
+        # print(images.shape)
+        images_aug = tf.numpy_function(func=imgaug_augment, inp=[images], Tout=tf.float32)
+        # print(images_aug.shape)
+        # print(type(images_aug))
 
-    # data = next(dataset_it)[0]
-    # print(data.shape)
-    ndx_op = np.random.randint(0, len(ops))
-    images_aug = ops[ndx_op][0](**{**dict(image=images), **ops[ndx_op][1]})
     images_aug = tf.clip_by_value(images_aug, 0, 255)
     return images_aug
 
@@ -319,11 +330,61 @@ def train_siamese_network(**params):
         dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
         dataset_train = dataset_train.shuffle(n_samples_train).map(lambda x: load_image(x, input_shape),
                                       num_parallel_calls=AUTOTUNE).batch(batch_size)
+
+        # dataset_it = iter(dataset_train)
+        # while True:
+        #     # file_path = next(dataset_it)
+        #     # img = cv2.imread(file_path[0].numpy().decode())
+        #     # print(img.shape)
+        #     # print(img.min(), img.max())
+        #     # cv2.imshow('img', img)
+        #     # cv2.waitKey()
+        #     # image, label = parse_image(file_path, input_shape, preprocessor)
+        #
+        #     # image, label = load_image(file_path, input_shape)
+        #     # print(image.shape, image.dtype)
+        #     # print(image.numpy().min(), image.numpy().max())
+        #     # print(label)
+        #     # cv2.imshow('img', np.uint8(image.numpy()))
+        #     # cv2.waitKey()
+        #
+        #     x, y = next(dataset_it)
+        #     # seq = augmentations.build_augmentation_sequence_heavy()
+        #     # x = x.numpy()
+        #     # print(x.shape)
+        #     # # x = x.numpy().astype('uint8')
+        #     # x = seq(images=x)
+        #     # print(len(x))
+        #     # print(x[0].shape)
+        #     # cv2.imshow('img', np.uint8(x[0]))
+        #     # cv2.waitKey()
+        #
+        #     def augment_image(image):
+        #         seq = augmentations.build_augmentation_sequence_heavy()
+        #         # self.augmentation_sequence.seed = self.rng.integers(0, 2 ** 16)
+        #         image = tf.cast(image, tf.uint8).numpy()
+        #         image = seq.augment_images(image)
+        #         return tf.cast(image, tf.float32)
+        #     x = tf.numpy_function(func=augment_image, inp=[x], Tout=tf.float32)
+        #     print(x.shape)
+        #     print(type(x))
+
         if 'data_augmentation' in params.keys():
             if params['data_augmentation'] is not None:
                 dataset_train = dataset_train.map(lambda x, y: (augment_images(x, params['data_augmentation']), y),
                                                   num_parallel_calls=AUTOTUNE)
+        # dataset_it = iter(dataset_train)
+        # x, y = next(dataset_it)
+        # print(x.shape)
+        # x = x.numpy()
+        # for n in range(len(x)):
+        #     cv2.imshow('img', np.uint8(x[n]))
+        #     print(x[n].shape)
+        #     print(x[n].min(), x[n].max())
+        #     cv2.waitKey()
+
         dataset_train = dataset_train.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
+
 
     if 'path_val' in params.keys():
         dataset_val = dataset_to_dict(params['path_val'])
