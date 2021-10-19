@@ -400,6 +400,8 @@ def train_siamese_network(**params):
     learning_rate = params['optimizer_params']['learning_rate']
     if params['optimizer'] == 'adam':
         optimizer = tf.keras.optimizers.Adam(lr=learning_rate)
+    elif params['optimizer'] == 'sgd':
+        optimizer = tf.keras.optimizers.SGD(lr=learning_rate)
 
     if params['loss'] == 'contrastive_loss':
         loss_fn = tfa.losses.ContrastiveLoss()
