@@ -15,7 +15,7 @@ import time
 from sklearn import metrics
 # import itertools
 from numpy.random import default_rng
-from util import dataset_to_dict, plot_tsne
+from util import dataset_to_dict, plot_tsne, oversample_dataset
 import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import json
@@ -316,6 +316,11 @@ def train_siamese_network(**params):
         # dataset_train = dataset_to_dict(params['path_train'], n_samples_per_class=128)
         n_samples_train = len(dataset_train)
         params['n_samples_train'] = n_samples_train
+
+        if 'oversample' in params.keys():
+            if params['oversample'] is True:
+                dataset_train = oversample_dataset(dataset_train)
+
         dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
         dataset_train = dataset_train.shuffle(n_samples_train).map(lambda x: load_image(x, input_shape),
                                       num_parallel_calls=AUTOTUNE).batch(batch_size)
