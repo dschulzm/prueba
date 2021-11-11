@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import cv2
 import os
@@ -75,9 +77,6 @@ def dataset_to_dict(input_data, shuffle_list=True, n_samples_per_class=None, rem
             sample_dict['label'] = int(label)
             dataset.append(sample_dict)
 
-    if shuffle_list:
-        random.shuffle(dataset)
-
     if remap_labels is not None:
         for data in dataset:
             data['label'] = remap_labels[data['label']]
@@ -92,6 +91,9 @@ def dataset_to_dict(input_data, shuffle_list=True, n_samples_per_class=None, rem
             # print(lbl, len(dataset_lbl))
             dataset_new += dataset_lbl
         dataset = dataset_new
+
+    if shuffle_list is True:
+        random.shuffle(dataset)
 
     print(input_data)
     labels_set = sorted(list(set([x['label'] for x in dataset])))
@@ -144,3 +146,27 @@ def dataset_dict_generator(input_list, target_size, batch_size, preprocessor=Non
                 y.clear()
                 cont = 0
 
+
+def write_dataset_dict(dataset, filename):
+    f = open(filename, 'wt')
+
+    for sample in dataset:
+        line = str(sample['id']) + ' ' + str(sample['label']) + '\n'
+        f.write(line)
+
+    f.close()
+
+
+def oversample_dataset(dataset):
+    dataset_new = list()
+    labels_set = sorted(list(set([x['label'] for x in dataset])))
+    n_max_samples = max([len([x for x in dataset if x['label'] == lbl]) for lbl in labels_set])
+    for lbl in labels_set:
+        dataset_lbl = [x for x in dataset if x['label'] == lbl]
+        dataset_tmp = copy.deepcopy(dataset_lbl)
+        for i in range(int(n_max_samples/len(dataset_lbl))):
+            random.shuffle(dataset_lbl)
+            dataset_tmp += dataset_lbl
+        dataset_new += dataset_tmp[0:n_max_samples]
+    random.shuffle(dataset_new)
+    return dataset_new

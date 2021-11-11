@@ -1,5 +1,8 @@
 import os
 import sys
+
+import sklearn.metrics
+
 sys.path.append('/home/dschulz/TOC/aikit/')
 # from aikit.metrics import iso_30107_3, scores, det_curve
 
@@ -15,7 +18,7 @@ import time
 from sklearn import metrics
 # import itertools
 from numpy.random import default_rng
-from util import dataset_to_dict, plot_tsne
+from util import dataset_to_dict, plot_tsne, oversample_dataset
 import tensorflow_addons as tfa
 import matplotlib.pyplot as plt
 import json
@@ -46,6 +49,7 @@ def load_image(filename, input_shape):
     image = tf.io.read_file(filename)
     image = tf.image.decode_image(image, expand_animations=False)
     image = tf.image.resize(image, input_shape[0:2])
+    # image = tf.image.resize(image, input_shape[0:2], method=tf.image.ResizeMethod.AREA)
     # image = tf.cast(image, tf.uint8)
     return image, label
 
@@ -141,6 +145,7 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
 
     # Test dataset
     dataset_test = dataset_to_dict(test_path)
+    test_ids = [x['id'] for x in dataset_test]
     dataset_test = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_test]).map(
         lambda x: parse_image(x, input_shape, preprocessor)).batch(batch_size)
 
@@ -161,6 +166,19 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     fpr, tpr, thresholds = metrics.roc_curve(test_labels_binary, [(1 - x) for x in distances])
     auc = metrics.roc_auc_score(test_labels_binary, [(1 - x) for x in distances])
     best_ndx = np.argmax(tpr - fpr)
+
+    results_detail = list()
+    for n, id in enumerate(test_ids):
+        results_detail_dict = dict()
+        results_detail_dict['id'] = id
+        results_detail_dict['label'] = str(test_labels[n])
+        results_detail_dict['distance_templates'] = str(distances[n])
+        results_detail_dict['few_shots_pred'] = str(few_shot_predictions[n])
+        # print(x, test_labels[n], distances[n])
+        results_detail.append(results_detail_dict)
+    with open(os.path.join(results_path, 'results_detail.json'), 'w', encoding='utf-8') as f:
+        json.dump(results_detail, f, ensure_ascii=False, indent=2)
+
 
     results['fpr'] = fpr[best_ndx]
     results['tpr'] = tpr[best_ndx]
@@ -308,7 +326,15 @@ def train_siamese_network(**params):
     #     # preprocessor = mobilenet_v3.preprocess_input
     # elif params['backbone'] == 'mobilenetv2_large':
     #     # preprocessor = mobilenet_v3.preprocess_input
+    elif params['backbone'] == 'custom':
+        try:
+            backbone_model = load_model(weights, compile=False)
+        except Exception as e:
+            sys.exit('If using a custom backbone, corresponding weights must be loaded.')
+        backbone_model = Model(inputs=backbone_model.input, outputs=backbone_model.layers[-2].output)
+        preprocessor = mobilenet_v2.preprocess_input # !!!!!!!!!!!!!!!!!!!!!!!DEJAR GENERICO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+    # Add L2 normalization layer
     output = tf.keras.layers.Lambda(lambda x: tf.math.l2_normalize(x, axis=1), name='l2_norm')(backbone_model.output)
     model = Model(inputs=backbone_model.input, outputs=output)
 
@@ -327,6 +353,11 @@ def train_siamese_network(**params):
         # dataset_train = dataset_to_dict(params['path_train'], n_samples_per_class=128)
         n_samples_train = len(dataset_train)
         params['n_samples_train'] = n_samples_train
+
+        if 'oversample' in params.keys():
+            if params['oversample'] is True:
+                dataset_train = oversample_dataset(dataset_train)
+
         dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
         dataset_train = dataset_train.shuffle(n_samples_train).map(lambda x: load_image(x, input_shape),
                                       num_parallel_calls=AUTOTUNE).batch(batch_size)
