@@ -1,22 +1,18 @@
 import os
 import sys
-
-import sklearn.metrics
+import warnings
 
 sys.path.append('/home/dschulz/TOC/aikit/')
 # from aikit.metrics import iso_30107_3, scores, det_curve
 
-import cv2
+# import cv2
 import tensorflow as tf
 import numpy as np
 import random
 from datetime import datetime
 from tensorflow.keras.applications import mobilenet_v2, resnet50, resnet
-# import cv2
 from tensorflow.keras.models import Model, load_model
-import time
 from sklearn import metrics
-# import itertools
 from numpy.random import default_rng
 from util import dataset_to_dict, plot_tsne, oversample_dataset
 import tensorflow_addons as tfa
@@ -24,9 +20,10 @@ import matplotlib.pyplot as plt
 import json
 import socket
 import metrics as metrics_dschulz
+import callbacks as custom_callbacks
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-
+DEBUG = False
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 # Force to use CPU
@@ -66,7 +63,6 @@ def parse_image(filename, input_shape, preprocessor):
 
 
 def predict_from_templates(model, images, templates):
-
     templates_feat = model.predict(templates)
     test_feat = model.predict(images)
 
@@ -77,12 +73,9 @@ def predict_from_templates(model, images, templates):
         predictions.append(y_pred)
 
     return np.asarray(predictions)
-    # return np.asarray(np.max(0, 1-predictions)) # Scores between 0 and 1
 
 
 def predict_from_few_shots(model, images, templates, template_labels):
-    # model.trainable = False
-
     templates_feat = model.predict(templates)
     test_feat = model.predict(images)
 
@@ -105,12 +98,14 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     # Try to load json with parameters
     backbone = None
     input_shape = (224, 224, 3)
+    batch_size = 128
     params_path = os.path.join(model_path, 'params.json')
     if os.path.exists(params_path):
         with open(params_path) as f:
             params = json.load(f)
         backbone = params['backbone']
         input_shape = params['input_shape']
+        batch_size = params['batch_size']
 
     if backbone == 'mobilenet_v2':
         preprocessor = mobilenet_v2.preprocess_input
@@ -123,12 +118,7 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     else:
         preprocessor = mobilenet_v2.preprocess_input
 
-    # Parameters
-    batch_size = 128
-
-    # Save results to disk
-    # results_path = datetime.today().strftime('%Y%m%d_%H%M%S')
-    # results_path = os.path.join(model_path, results_path + '_eval')
+    # Create folder for saving results to disk
     if not os.path.exists(results_path):
         os.makedirs(results_path)
 
@@ -144,6 +134,10 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
 
     # Test dataset
     dataset_test = dataset_to_dict(test_path)
+    if DEBUG:
+        random.shuffle(dataset_test)
+        dataset_test = dataset_test[0:128]
+
     test_ids = [x['id'] for x in dataset_test]
     dataset_test = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_test]).map(
         lambda x: parse_image(x, input_shape, preprocessor)).batch(batch_size)
@@ -173,11 +167,9 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
         results_detail_dict['label'] = str(test_labels[n])
         results_detail_dict['distance_templates'] = str(distances[n])
         results_detail_dict['few_shots_pred'] = str(few_shot_predictions[n])
-        # print(x, test_labels[n], distances[n])
         results_detail.append(results_detail_dict)
     with open(os.path.join(results_path, 'results_detail.json'), 'w', encoding='utf-8') as f:
         json.dump(results_detail, f, ensure_ascii=False, indent=2)
-
 
     results['fpr'] = fpr[best_ndx]
     results['tpr'] = tpr[best_ndx]
@@ -291,7 +283,6 @@ def train_siamese_network(**params):
     exp_dir = datetime.today().strftime('%Y%m%d_%H%M%S') + '_' + socket.gethostname()
     if not os.path.exists(exp_dir):
         os.makedirs(exp_dir)
-    # log = Logger(os.path.join(exp_dir, 'output.log'))
 
     # Read backbone_model network
     if params['backbone'] == 'mobilenetv2':
@@ -334,12 +325,12 @@ def train_siamese_network(**params):
                     break
                 else:
                     layer.trainable = False
-    # for layer in model.layers:
-    #     print(layer.name, layer.trainable)
 
     if 'path_train' in params.keys():
         dataset_train = dataset_to_dict(params['path_train'])
-        # dataset_train = dataset_to_dict(params['path_train'], n_samples_per_class=128)
+        if DEBUG:
+            random.shuffle(dataset_train)
+            dataset_train = dataset_train[0:256]
         n_samples_train = len(dataset_train)
         params['n_samples_train'] = n_samples_train
 
@@ -358,11 +349,12 @@ def train_siamese_network(**params):
 
     if 'path_val' in params.keys():
         dataset_val = dataset_to_dict(params['path_val'])
+        if DEBUG:
+            random.shuffle(dataset_val)
+            dataset_val = dataset_val[0:256]
         n_samples_val = len(dataset_val)
         params['n_samples_val'] = n_samples_val
         dataset_val = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_val])
-        # dataset_val = dataset_val.map(lambda x: parse_image(x, input_shape, preprocessor),
-        #                               num_parallel_calls=AUTOTUNE).batch(batch_size).prefetch(AUTOTUNE)
         dataset_val = dataset_val.map(lambda x: load_image(x, input_shape),
                                       num_parallel_calls=AUTOTUNE).batch(batch_size).map(
             lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
@@ -395,13 +387,13 @@ def train_siamese_network(**params):
     callbacks = list()
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=latest_model_path))
     callbacks.append(tf.keras.callbacks.ModelCheckpoint(filepath=best_model_path, save_best_only=True, monitor='val_loss'))
-    # callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=os.path.join(exp_dir, 'logs')))
 
-    # Save params to disk
-    with open(os.path.join(best_model_path, 'params.json'), 'w', encoding='utf-8') as f:
-        json.dump(params, f, ensure_ascii=False, indent=2)
-    with open(os.path.join(latest_model_path, 'params.json'), 'w', encoding='utf-8') as f:
-        json.dump(params, f, ensure_ascii=False, indent=2)
+    callbacks.append(custom_callbacks.SaveTrainingData(latest_model_path, params))
+    callbacks.append(custom_callbacks.SaveTrainingData(best_model_path, params, save_best_only=True, monitor='val_loss'))
+
+    if DEBUG:
+        epochs = 100
+        warnings.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING: USING DEBUGGING MODE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     # Train the network
     history = model.fit(
@@ -409,16 +401,6 @@ def train_siamese_network(**params):
         validation_data=dataset_val,
         epochs=epochs,
         callbacks=callbacks)
-
-    # Save training plot
-    for key in sorted(history.history.keys()):
-        plt.plot(range(1, len(history.history[key])+1), history.history[key], label=key)
-    plt.grid()
-    plt.legend()
-    plt.xlabel('epochs')
-    plt.title('Training evolution')
-    plt.savefig(os.path.join(best_model_path, 'evolution.jpg'), dpi=150)
-    plt.savefig(os.path.join(latest_model_path, 'evolution.jpg'), dpi=150)
 
     # Eval model
     if 'path_test' in params.keys():
@@ -436,5 +418,4 @@ def train_siamese_network(**params):
                              results_path)
 
         tf.keras.backend.clear_session()
-    # log.close()
     plt.clf()
