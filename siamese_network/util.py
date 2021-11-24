@@ -13,17 +13,20 @@ def plot_tsne(x, y=None, labels=None, colors=None, plot_title=None, path_save=No
     if y is None:
         y = np.zeros((x.shape[0]))
     if labels is None:
-        labels = [''] * x.shape[0]
+        labels = sorted(list(np.unique(y)))
     if colors is None:
         colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    markers = ['o', 'v', '^', '<', '>', 's', 'd', '*']
+
     if plot_title is None:
         plot_title = 't-SNE 2D projection'
 
     x_tsne = TSNE(n_components=2).fit_transform(x)
     plt.figure(figsize=(20, 10))
     # plt.figure(figsize=(14, 7))
-    for n, lbl in enumerate(np.unique(y).tolist()):
-        plt.scatter(x_tsne[y == lbl, 0], x_tsne[y == lbl, 1], color=colors[n], label=labels[n])
+    for n, lbl in enumerate(sorted(np.unique(y).tolist())):
+        print(n, lbl)
+        plt.scatter(x_tsne[y == lbl, 0], x_tsne[y == lbl, 1], color=colors[n % len(colors)], marker=markers[n % len(markers)], label=labels[n])
     plt.legend()
     plt.grid()
 

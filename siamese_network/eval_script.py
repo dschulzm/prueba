@@ -8,7 +8,7 @@ import time
 
 def main():
     # eval_path = '/home/dschulz/TOC/siameseNetwork/models/finishedTrainingsTripletLoss/test_arg2'
-    eval_path = '/home/dschulz/TOC/fakeid_2.0/siamese_network/20211111_185136_TOC-Desktop-RTX2080Ti'
+    eval_path = '/home/dschulz/TOC/fakeid_2.0/siamese_network/20211119_112532_dschulz-HP-Pavilion-TOC/best_model'
     models_path = list()
     for path, subdirs, files in os.walk(eval_path):
         for name in files:
@@ -35,6 +35,7 @@ def main():
         add_params_dict['backbone_params'] = params['backbone_params'] if 'backbone_params' in params.keys() else None
         add_params_dict['data_augmentation'] = params['data_augmentation'] if 'data_augmentation' in params.keys() else None
         add_params_dict['oversample'] = params['oversample'] if 'oversample' in params.keys() else False
+        add_params_dict['optimizer'] = params['optimizer']
 
         results_path = os.path.join(model_path, results_dir, 'results.json')
         if os.path.exists(results_path):

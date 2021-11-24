@@ -50,18 +50,6 @@ def load_image(filename, input_shape):
     return image, label
 
 
-def parse_image(filename, input_shape, preprocessor):
-    label = tf.strings.to_number(filename[1], out_type=tf.dtypes.int64)
-    filename = filename[0]
-
-    image = tf.io.read_file(filename)
-    image = tf.image.decode_image(image, expand_animations=False)
-    image = tf.image.resize(image, input_shape[0:2])
-    # image = tf.cast(image, tf.uint8)
-    image = preprocessor(image)
-    return image, label
-
-
 def predict_from_templates(model, images, templates):
     templates_feat = model.predict(templates)
     test_feat = model.predict(images)
@@ -126,11 +114,17 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     dataset_templates = dataset_to_dict(templates_path, n_samples_per_class=n_templates)
     random.shuffle(dataset_templates)
     dataset_templates_digital = [x for x in dataset_templates if x['label'] == 0][0:n_templates]
-    dataset_templates_digital = tf.data.Dataset.from_tensor_slices(
-        [[x['id'], str(x['label'])] for x in dataset_templates_digital]).map(
-        lambda x: parse_image(x, input_shape, preprocessor)).batch(batch_size)
-    dataset_templates = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_templates]).map(
-        lambda x: parse_image(x, input_shape, preprocessor)).batch(batch_size)
+    dataset_templates_digital = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_templates_digital])
+    dataset_templates_digital = dataset_templates_digital.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(
+        batch_size)
+    dataset_templates_digital = dataset_templates_digital.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(
+        AUTOTUNE)
+
+    dataset_templates = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_templates])
+    dataset_templates = dataset_templates.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(
+        batch_size)
+    dataset_templates = dataset_templates.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(
+        AUTOTUNE)
 
     # Test dataset
     dataset_test = dataset_to_dict(test_path)
@@ -139,8 +133,9 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
         dataset_test = dataset_test[0:128]
 
     test_ids = [x['id'] for x in dataset_test]
-    dataset_test = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_test]).map(
-        lambda x: parse_image(x, input_shape, preprocessor)).batch(batch_size)
+    dataset_test = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_test])
+    dataset_test = dataset_test.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
+    dataset_test = dataset_test.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
 
     model = load_model(model_path, compile=False)
 
@@ -237,6 +232,7 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     disp.plot()
     plt.title('Confusion Matrix')
     plt.savefig(os.path.join(results_path, 'conf_matrix.jpg'), dpi=150)
+    plt.close()
 
     tmp_dict = dict()
     tmp_dict['model_path'] = model_path
@@ -392,7 +388,7 @@ def train_siamese_network(**params):
     callbacks.append(custom_callbacks.SaveTrainingData(best_model_path, params, save_best_only=True, monitor='val_loss'))
 
     if DEBUG:
-        epochs = 100
+        epochs = 10
         warnings.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING: USING DEBUGGING MODE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     # Train the network
@@ -401,6 +397,16 @@ def train_siamese_network(**params):
         validation_data=dataset_val,
         epochs=epochs,
         callbacks=callbacks)
+
+    # Plot tSNE for training data
+    dataset_train = dataset_to_dict(params['path_train'])
+    dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
+    dataset_train = dataset_train.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
+    dataset_train = dataset_train.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
+
+    train_feat = model.predict(dataset_train)
+    train_labels = np.concatenate([y for x, y in dataset_train], axis=0)
+    plot_tsne(train_feat, train_labels, path_save=os.path.join(latest_model_path, 'tsne_2d.jpg'))
 
     # Eval model
     if 'path_test' in params.keys():
