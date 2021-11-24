@@ -1,6 +1,7 @@
 import os
 import sys
 import warnings
+import shutil
 
 sys.path.append('/home/dschulz/TOC/aikit/')
 # from aikit.metrics import iso_30107_3, scores, det_curve
@@ -220,7 +221,7 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     # metrics_dschulz.det_curve_new(test_labels, 1 - distances)
 
     test_feat = model.predict(dataset_test)
-    plot_tsne(test_feat, test_labels, labels=display_labels, path_save=os.path.join(results_path, 'tsne_2d.jpg'))
+    plot_tsne(test_feat, test_labels, labels=display_labels, path_save=os.path.join(results_path, 'tsne_2d_test.jpg'))
 
     roc_display = metrics.RocCurveDisplay(fpr=fpr, tpr=tpr).plot()
     plt.grid()
@@ -399,14 +400,27 @@ def train_siamese_network(**params):
         callbacks=callbacks)
 
     # Plot tSNE for training data
+    dataset_val = dataset_to_dict(params['path_val'])
+    dataset_val = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_val])
+    dataset_val = dataset_val.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
+    dataset_val = dataset_val.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
+    val_feat = model.predict(dataset_val)
+    val_labels = np.concatenate([y for x, y in dataset_val], axis=0)
+
     dataset_train = dataset_to_dict(params['path_train'])
     dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
     dataset_train = dataset_train.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
     dataset_train = dataset_train.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
-
     train_feat = model.predict(dataset_train)
-    train_labels = np.concatenate([y for x, y in dataset_train], axis=0)
-    plot_tsne(train_feat, train_labels, path_save=os.path.join(latest_model_path, 'tsne_2d.jpg'))
+    train_labels = np.concatenate([(y + np.max(val_labels) + 1) for x, y in dataset_train], axis=0)
+
+    feat = np.concatenate((train_feat, val_feat))
+    labels = np.concatenate((train_labels, val_labels))
+    disp_labels = sorted(list(set(['val-' + str(x)  for x in val_labels]))) \
+                  + sorted(list(set(['train-' + str(x - np.max(val_labels) - 1) for x in train_labels])))
+
+    plot_tsne(feat, labels, labels=disp_labels, path_save=os.path.join(latest_model_path, 'tsne_2d_train_val.jpg'))
+    shutil.copy2(os.path.join(latest_model_path, 'tsne_2d_train_val.jpg'), best_model_path)
 
     # Eval model
     if 'path_test' in params.keys():
