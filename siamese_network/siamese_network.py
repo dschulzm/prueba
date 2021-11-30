@@ -96,7 +96,7 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
         input_shape = params['input_shape']
         batch_size = params['batch_size']
 
-    if backbone == 'mobilenet_v2':
+    if backbone == 'mobilenetv2':
         preprocessor = mobilenet_v2.preprocess_input
     elif backbone == 'resnet50':
         preprocessor = resnet50.preprocess_input
