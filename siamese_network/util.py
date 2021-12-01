@@ -24,8 +24,7 @@ def plot_tsne(x, y=None, labels=None, colors=None, plot_title=None, path_save=No
     x_tsne = TSNE(n_components=2).fit_transform(x)
     plt.figure(figsize=(20, 10))
     # plt.figure(figsize=(14, 7))
-    for n, lbl in enumerate(sorted(np.unique(y).tolist(), reverse=True)):
-        print(n, lbl)
+    for n, lbl in enumerate(sorted(np.unique(y).tolist())):
         plt.scatter(x_tsne[y == lbl, 0], x_tsne[y == lbl, 1], color=colors[n % len(colors)], marker=markers[n % len(markers)], label=labels[n])
     plt.legend()
     plt.grid()

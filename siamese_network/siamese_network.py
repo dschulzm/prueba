@@ -389,7 +389,7 @@ def train_siamese_network(**params):
     callbacks.append(custom_callbacks.SaveTrainingData(best_model_path, params, save_best_only=True, monitor='val_loss'))
 
     if DEBUG:
-        epochs = 10
+        epochs = 5
         warnings.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! WARNING: USING DEBUGGING MODE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
     # Train the network
@@ -400,25 +400,24 @@ def train_siamese_network(**params):
         callbacks=callbacks)
 
     # Plot tSNE for training data
-    dataset_val = dataset_to_dict(params['path_val'])
-    dataset_val = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_val])
-    dataset_val = dataset_val.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
-    dataset_val = dataset_val.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
-    val_feat = model.predict(dataset_val)
-    val_labels = np.concatenate([y for x, y in dataset_val], axis=0)
-
     dataset_train = dataset_to_dict(params['path_train'])
     dataset_train = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_train])
     dataset_train = dataset_train.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
     dataset_train = dataset_train.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
     train_feat = model.predict(dataset_train)
-    train_labels = np.concatenate([(y + np.max(val_labels) + 1) for x, y in dataset_train], axis=0)
+    train_labels = np.concatenate([y for x, y in dataset_train], axis=0)
+
+    dataset_val = dataset_to_dict(params['path_val'])
+    dataset_val = tf.data.Dataset.from_tensor_slices([[x['id'], str(x['label'])] for x in dataset_val])
+    dataset_val = dataset_val.map(lambda x: load_image(x, input_shape), num_parallel_calls=AUTOTUNE).batch(batch_size)
+    dataset_val = dataset_val.map(lambda x, y: (preprocessor(x), y), num_parallel_calls=AUTOTUNE).prefetch(AUTOTUNE)
+    val_feat = model.predict(dataset_val)
+    val_labels = np.concatenate([(y + np.max(train_labels) + 1) for x, y in dataset_val], axis=0)
 
     feat = np.concatenate((train_feat, val_feat))
     labels = np.concatenate((train_labels, val_labels))
-    disp_labels = sorted(list(set(['val-' + str(x)  for x in val_labels]))) \
-                  + sorted(list(set(['train-' + str(x - np.max(val_labels) - 1) for x in train_labels])))
-
+    disp_labels = sorted(list(set(['train-' + str(x) for x in train_labels]))) + sorted(
+        list(set(['val-' + str(x - np.max(train_labels) - 1) for x in val_labels])))
     plot_tsne(feat, labels, labels=disp_labels, path_save=os.path.join(latest_model_path, 'tsne_2d_train_val.jpg'))
     shutil.copy2(os.path.join(latest_model_path, 'tsne_2d_train_val.jpg'), best_model_path)
 
