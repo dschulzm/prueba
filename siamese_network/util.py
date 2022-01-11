@@ -99,8 +99,11 @@ def dataset_to_dict(input_data, shuffle_list=True, n_samples_per_class=None, rem
 
     print(input_data)
     labels_set = sorted(list(set([x['label'] for x in dataset])))
-    for lbl in labels_set:
-        print('label: %d n_samples: %d' % (lbl, len([x for x in dataset if x['label'] == lbl])))
+    if len(labels_set) < 20:
+        for lbl in labels_set:
+            print('label: %d n_samples: %d' % (lbl, len([x for x in dataset if x['label'] == lbl])))
+    print('Total classes in dataset: %d' % len(labels_set))
+    print('Nmbr samples in dataset: %d' % len(dataset))
 
     return dataset
 
