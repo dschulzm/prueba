@@ -44,7 +44,7 @@ def load_image(filename, input_shape):
     filename = filename[0]
 
     image = tf.io.read_file(filename)
-    image = tf.image.decode_image(image, expand_animations=False)
+    image = tf.image.decode_image(image, channels=3, expand_animations=False)
     image = tf.image.resize(image, input_shape[0:2])
     # image = tf.image.resize(image, input_shape[0:2], method=tf.image.ResizeMethod.AREA)
     # image = tf.cast(image, tf.uint8)
