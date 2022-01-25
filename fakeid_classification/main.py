@@ -1,5 +1,6 @@
 from fakeid_classification import FakeID2
 from fakeid_segmentation import FakeIDSegmentation
+from fakeid_remote import FakeIDRemote
 import sys
 import cv2
 import os
@@ -9,6 +10,7 @@ import time
 from tqdm import tqdm
 import pandas as pd
 import seaborn as sns
+import warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 # Force to use CPU
@@ -109,11 +111,14 @@ def dataset_to_dict(input_data, shuffle_list=True, n_samples_per_class=None, rem
 
 
 def main():
+    REMOTE_EVAL = False
     fakeid_path = '../releases/MEX-2021-12/models/fakeid/'
+    url_remote = 'http://54.145.73.43:5000/api/v3/document/fake/detector'
     segmentator_path = '../releases/MEX-2021-12/models/segmentation/MobileUNet_TF22_ALL_V181121.h5'
     dataset_path = ['/home/dschulz/TOC/fakeid/datasets/mex/test.txt', '/home/dschulz/TOC/fakeid/datasets/arg/21.3.9/test.txt']
 
     # Instantiate models
+    fakeid_remote = FakeIDRemote(url_remote)
     fakeid_model = FakeID2(fakeid_path)
     segmentation_model = FakeIDSegmentation(segmentator_path)
 
@@ -123,16 +128,22 @@ def main():
         os.makedirs(results_path)
 
     dataset = dataset_to_dict(dataset_path)
+    if REMOTE_EVAL:
+        warnings.warn('!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Performing remote evaluation !!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
     labels = list()
     predictions = list()
     scores = list()
     f = open(os.path.join(results_path, 'scores.txt'), 'wt')
     t0 = time.time()
     for data in tqdm(dataset):
-        image = cv2.cvtColor(cv2.imread(data['id']), cv2.COLOR_BGR2RGB)
-        image = segmentation_model.forward(image)
-        image = fakeid_model.process_image(image)
-        pred, score = fakeid_model.classify(image)
+        if REMOTE_EVAL:
+            pred, score = fakeid_remote.classify(data['id'])
+        else:
+            image = cv2.cvtColor(cv2.imread(data['id']), cv2.COLOR_BGR2RGB)
+            image = segmentation_model.forward(image)
+            image = fakeid_model.process_image(image)
+            pred, score = fakeid_model.classify(image)
 
         labels.append(data['label'])
         predictions.append(pred)
