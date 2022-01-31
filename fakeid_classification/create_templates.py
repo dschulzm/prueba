@@ -91,14 +91,15 @@ def main():
     random.seed(seed)
     tf.random.set_seed(seed)
 
-    model_path = '/home/dschulz/TOC/fakeid_2.0/releases/kaka'
+    model_path = '/home/dschulz/TOC/fakeid_2.0/releases/MEX-2021-12/models/fakeid_eval'
+    templates_path = None # '/home/dschulz/TOC/fakeid/datasets/segmented/arg1/train.txt'
 
     if os.path.exists(os.path.join(model_path, 'params.json')):
         with open(os.path.join(model_path, 'params.json')) as f:
             params = json.load(f)
 
-    templates_path = params['path_templates'] if 'path_templates' in params.keys() else os.path.join(
-        os.path.split(params['path_val'])[0], 'train.txt')
+    if templates_path is None:
+        templates_path = params['path_templates']
     n_templates = params['n_templates'] if 'n_templates' in params.keys() else 4
     input_shape = params['input_shape'] if 'n_templates' in params.keys() else (224, 224, 3)
 
