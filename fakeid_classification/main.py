@@ -110,12 +110,97 @@ def dataset_to_dict(input_data, shuffle_list=True, n_samples_per_class=None, rem
     return dataset
 
 
+def eval(labels, scores, threshold, results_path):
+    if not os.path.exists(results_path):
+        os.makedirs(results_path)
+
+    # Evaluation
+    labels = np.array(labels)
+    scores = np.array(scores)
+
+    attack_scores, bonafide_scores, attack_true, bonafide_true = split_scores(labels, scores, bonafide_label=0)
+    pais_attack_scores = split_attack_scores(attack_true, attack_scores)
+
+    det_pais = det_curve_pais(attack_true, attack_scores, bonafide_scores)
+    eer_pais_ = eer_pais(det_pais, percentage=True)
+
+    max_eer_pais = max(eer_pais_, key=eer_pais_.get)
+    max_attack_scores, max_attack_pais = max_error_pais_scores(attack_true, attack_scores, threshold=threshold)
+
+    acer_ = acer(attack_true, attack_scores, bonafide_scores, threshold=threshold)
+    apcer_ = apcer_pais(attack_true, attack_scores, threshold=threshold, percentage=True)
+    bpcer_ = bpcer(bonafide_scores, threshold=threshold)
+
+    bpcer_ap_all = {key: None for key in [10, 20, 50, 100, 200, 500, 1000, 10000]}
+    for val in bpcer_ap_all.keys():
+        bpcer_ap_pais = dict()
+        for pais in eer_pais_.keys():
+            bpcer_ap_, bpcer_ap_thres = bpcer_ap(det_pais[pais][0], det_pais[pais][1], det_pais[pais][2], val, percentage=True)
+            bpcer_ap_pais[pais] = (bpcer_ap_, bpcer_ap_thres)
+        max_bpcer_ap = max(bpcer_ap_pais, key=bpcer_ap_pais.get)
+        bpcer_ap_all[val] = bpcer_ap_pais[max_bpcer_ap]
+    riapar_ = riapar(max_attack_scores, bonafide_scores, attack_threshold=threshold, bonafide_threshold=threshold)
+
+    classes = np.array(["digital", "border", "printed", "screen", "plastic", "synthetic"])
+    # classes = np.array(display_labels)
+    bf_label = 0
+    f = open(os.path.join(results_path, 'report.txt'), 'wt')
+    f.write(
+        f"        Bona Fide label: {bf_label}: {classes[bf_label]}\n"
+        f"            Threshold t: {threshold}\n"
+        "--------------------------------------------\n"
+        f"           Max EER PAIS: {max_eer_pais}: {classes[max_eer_pais]}\n"
+        f"                 EER[{max_eer_pais}]: {eer_pais_[max_eer_pais][0]}%\n"
+        f"       EER threshold[{max_eer_pais}]: {eer_pais_[max_eer_pais][1]}\n"
+        "--------------------------------------------\n"
+        f"      Max APCER PAIS(t): {max_attack_pais}: {classes[max_attack_pais]}\n"
+        f"                ACER(t): {acer_ * 100}%\n"
+        f"               APCER(t): {apcer_}%\n"
+        f"               BPCER(t): {bpcer_ * 100}%\n"
+        f"              RIAPAR(t): {riapar_ * 100}%\n"
+        f"                 EER[{max_attack_pais}]: {eer_pais_[max_attack_pais][0]}%\n"
+        f"       EER threshold[{max_attack_pais}]: {eer_pais_[max_attack_pais][1]}\n"
+        "--------------------------------------------\n"
+    )
+    for val in bpcer_ap_all.keys():
+        f.write(f"   BPCER{val}(APCER={100/val}%): {bpcer_ap_all[val][0]}%, {bpcer_ap_all[val][1]}\n")
+
+    f.close()
+
+    # Create results plots
+    det = DETPlot(title="DET Curve")
+    det.set_system_pais(attack_true, attack_scores, bonafide_scores, pais_names=classes, label="Fake-ID 2.0")
+    det_ = det.plot()
+    det_.savefig(os.path.join(results_path, 'det.jpg'))
+
+    cmap = sns.cubehelix_palette(start=0.5, rot=-0.75, gamma=1.2, hue=1.25, dark=0.15, reverse=True, as_cmap=True)
+    cm2 = plot_system_confusion_matrix(
+        attack_scores,
+        bonafide_scores,
+        threshold=threshold,
+        fontsize=30,
+        cmap=cmap
+    )
+    cm2.savefig(os.path.join(results_path, 'conf_matrix_binary.jpg'))
+
+    padded_attack_scores, padded_bonafide_scores = pad_scores(attack_scores, bonafide_scores)
+    df = pd.DataFrame({'Bona fide scores': padded_bonafide_scores, 'Attack presentation scores': padded_attack_scores})
+    kde = performance_evaluation(df, threshold=threshold, figsize=(10, 10))
+    kde.savefig(os.path.join(results_path, 'kde.jpg'))
+    kde2 = performance_evaluation(df, threshold=threshold, log_scale=True, figsize=(10, 10))
+    kde2.savefig(os.path.join(results_path, 'kde2.jpg'))
+
+
 def main():
     REMOTE_EVAL = False
     fakeid_path = '../releases/MEX-2021-12/models/fakeid/'
     url_remote = 'http://54.145.73.43:5000/api/v3/document/fake/detector'
     segmentator_path = '../releases/MEX-2021-12/models/segmentation/MobileUNet_TF22_ALL_V181121.h5'
-    dataset_path = ['/home/dschulz/TOC/fakeid/datasets/mex/test.txt', '/home/dschulz/TOC/fakeid/datasets/arg/21.3.9/test.txt']
+    dataset_path = ['/home/dschulz/TOC/fakeid/datasets/20210906-ARG-NOSEG/arg1/test.txt',
+                    '/home/dschulz/TOC/fakeid/datasets/20210906-ARG-NOSEG/arg2/test.txt',
+                    '/home/dschulz/TOC/fakeid/datasets/chl_2021-10-08/test.txt',
+                    '/home/dschulz/TOC/fakeid/datasets/mex/test.txt',
+                    '/home/dschulz/TOC/fakeid/datasets/segmented/uru/test.txt']
 
     # Instantiate models
     fakeid_remote = FakeIDRemote(url_remote)
@@ -155,84 +240,7 @@ def main():
     print('Total time:', t1 - t0, '[s]')
     print('Avg time per image:', 1000*(t1 - t0)/len(dataset), '[ms]')
 
-    # Evaluation
-    labels = np.array(labels)
-    scores = np.array(scores)
-    threshold = fakeid_model.threshold
-
-    attack_scores, bonafide_scores, attack_true, bonafide_true = split_scores(labels, scores, bonafide_label=0)
-    pais_attack_scores = split_attack_scores(attack_true, attack_scores)
-
-    det_pais = det_curve_pais(attack_true, attack_scores, bonafide_scores)
-    eer_pais_ = eer_pais(det_pais, percentage=True)
-
-    max_eer_pais = max(eer_pais_, key=eer_pais_.get)
-    max_attack_scores, max_attack_pais = max_error_pais_scores(attack_true, attack_scores, threshold=threshold)
-
-    acer_ = acer(attack_true, attack_scores, bonafide_scores, threshold=threshold)
-    apcer_ = apcer_pais(attack_true, attack_scores, threshold=threshold, percentage=True)
-    bpcer_ = bpcer(bonafide_scores, threshold=threshold)
-    bpcer10, bpcer10thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                     10, percentage=True)
-    bpcer20, bpcer20thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                     20, percentage=True)
-    bpcer100, bpcer100thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                       100, percentage=True)
-    bpcer1000, bpcer1000thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1],
-                                         det_pais[max_eer_pais][2], 1000, percentage=True)
-    bpcer10000, bpcer10000thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1],
-                                           det_pais[max_eer_pais][2], 10000, percentage=True)
-    riapar_ = riapar(max_attack_scores, bonafide_scores, attack_threshold=threshold, bonafide_threshold=threshold)
-
-    classes = np.array(["digital", "border", "printed", "screen"])
-    bf_label = 0
-    f = open(os.path.join(results_path, 'report.txt'), 'wt')
-    f.write(
-        f"        Bona Fide label: {bf_label}: {classes[bf_label]}\n"
-        f"            Threshold t: {threshold}\n"
-        "--------------------------------------------\n"
-        f"           Max EER PAIS: {max_eer_pais}: {classes[max_eer_pais]}\n"
-        f"                 EER[{max_eer_pais}]: {eer_pais_[max_eer_pais][0]}%\n"
-        f"       EER threshold[{max_eer_pais}]: {eer_pais_[max_eer_pais][1]}\n"
-        "--------------------------------------------\n"
-        f"      Max APCER PAIS(t): {max_attack_pais}: {classes[max_attack_pais]}\n"
-        f"                ACER(t): {acer_*100}%\n"
-        f"               APCER(t): {apcer_}%\n"
-        f"               BPCER(t): {bpcer_*100}%\n"
-        f"              RIAPAR(t): {riapar_*100}%\n"
-        f"                 EER[{max_attack_pais}]: {eer_pais_[max_attack_pais][0]}%\n"
-        f"       EER threshold[{max_attack_pais}]: {eer_pais_[max_attack_pais][1]}\n"
-        "--------------------------------------------\n"
-        f"   BPCER10(APCER=10.0%): {bpcer10}%, {bpcer10thres}\n"
-        f"   BPCER20(APCER=5.00%): {bpcer20}%, {bpcer20thres}\n"
-        f"  BPCER100(APCER=1.00%): {bpcer100}%, {bpcer100thres}\n"
-        f" BPCER1000(APCER=0.10%): {bpcer1000}%, {bpcer1000thres}\n"
-        f"BPCER10000(APCER=0.01%): {bpcer10000}%, {bpcer10000thres}\n"
-    )
-    f.close()
-
-    # Create results plots
-    det = DETPlot(title="DET Curve")
-    det.set_system_pais(attack_true, attack_scores, bonafide_scores, pais_names=classes, label="Fake-ID 2.0")
-    det_ = det.plot()
-    det_.savefig(os.path.join(results_path, 'det.jpg'))
-
-    cmap = sns.cubehelix_palette(start=0.5, rot=-0.75, gamma=1.2, hue=1.25, dark=0.15, reverse=True, as_cmap=True)
-    cm2 = plot_system_confusion_matrix(
-        attack_scores,
-        bonafide_scores,
-        threshold=threshold,
-        fontsize=30,
-        cmap=cmap
-    )
-    cm2.savefig(os.path.join(results_path, 'conf_matrix.jpg'))
-
-    padded_attack_scores, padded_bonafide_scores = pad_scores(attack_scores, bonafide_scores)
-    df = pd.DataFrame({'Bona fide scores': padded_bonafide_scores, 'Attack presentation scores': padded_attack_scores})
-    kde = performance_evaluation(df, threshold=threshold, figsize=(10, 10))
-    kde.savefig(os.path.join(results_path, 'kde.jpg'))
-    kde2 = performance_evaluation(df, threshold=threshold, log_scale=True, figsize=(10, 10))
-    kde2.savefig(os.path.join(results_path, 'kde2.jpg'))
+    eval(labels, scores, fakeid_model.threshold, results_path)
 
 
 if __name__ == '__main__':

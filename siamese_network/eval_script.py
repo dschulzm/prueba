@@ -8,7 +8,8 @@ import time
 
 def main():
     # eval_path = '/home/dschulz/TOC/siameseNetwork/models/finishedTrainingsTripletLoss/test_arg2'
-    eval_path = '/home/dschulz/TOC/fakeid_2.0/siamese_network/20211119_112532_dschulz-HP-Pavilion-TOC/best_model'
+    # eval_path = '/home/dschulz/TOC/fakeid_2.0/siamese_network/20220512_230349_TOC-Desktop-RTX2080Ti/best_model'
+    eval_path = '/home/dschulz/TOC/fakeid_2.0/siamese_network/20220517_081718_TOC-Desktop-RTX2080Ti/best_model'
     models_path = list()
     for path, subdirs, files in os.walk(eval_path):
         for name in files:

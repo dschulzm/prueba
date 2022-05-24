@@ -198,10 +198,10 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     results['thresholds'] = thresholds[best_ndx]
     results['auc'] = auc
 
-
     # Evaluation
     labels = test_labels
-    scores = 1-np.clip(distances, 0, 1)
+    # scores = (distances.max() - distances)/distances.max()
+    scores = 1 - np.clip(distances, 0, 1)
     threshold = 0.5
 
     attack_scores, bonafide_scores, attack_true, bonafide_true = split_scores(labels, scores, bonafide_label=0)
@@ -216,19 +216,19 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     acer_ = acer(attack_true, attack_scores, bonafide_scores, threshold=threshold)
     apcer_ = apcer_pais(attack_true, attack_scores, threshold=threshold, percentage=True)
     bpcer_ = bpcer(bonafide_scores, threshold=threshold)
-    bpcer10, bpcer10thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                     10, percentage=True)
-    bpcer20, bpcer20thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                     20, percentage=True)
-    bpcer100, bpcer100thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1], det_pais[max_eer_pais][2],
-                                       100, percentage=True)
-    bpcer1000, bpcer1000thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1],
-                                         det_pais[max_eer_pais][2], 1000, percentage=True)
-    bpcer10000, bpcer10000thres = bpcer_ap(det_pais[max_eer_pais][0], det_pais[max_eer_pais][1],
-                                           det_pais[max_eer_pais][2], 10000, percentage=True)
+
+    bpcer_ap_all = {key: None for key in [10, 20, 50, 100, 200, 500, 1000, 10000]}
+    for val in bpcer_ap_all.keys():
+        bpcer_ap_pais = dict()
+        for pais in eer_pais_.keys():
+            bpcer_ap_, bpcer_ap_thres = bpcer_ap(det_pais[pais][0], det_pais[pais][1], det_pais[pais][2], val, percentage=True)
+            bpcer_ap_pais[pais] = (bpcer_ap_, bpcer_ap_thres)
+        max_bpcer_ap = max(bpcer_ap_pais, key=bpcer_ap_pais.get)
+        bpcer_ap_all[val] = bpcer_ap_pais[max_bpcer_ap]
     riapar_ = riapar(max_attack_scores, bonafide_scores, attack_threshold=threshold, bonafide_threshold=threshold)
 
-    classes = np.array(["digital", "border", "printed", "screen"])
+    # classes = np.array(["digital", "border", "printed", "screen", "plastic", "synthetic"])
+    classes = np.array(display_labels)
     bf_label = 0
     f = open(os.path.join(results_path, 'report.txt'), 'wt')
     f.write(
@@ -247,12 +247,9 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
         f"                 EER[{max_attack_pais}]: {eer_pais_[max_attack_pais][0]}%\n"
         f"       EER threshold[{max_attack_pais}]: {eer_pais_[max_attack_pais][1]}\n"
         "--------------------------------------------\n"
-        f"   BPCER10(APCER=10.0%): {bpcer10}%, {bpcer10thres}\n"
-        f"   BPCER20(APCER=5.00%): {bpcer20}%, {bpcer20thres}\n"
-        f"  BPCER100(APCER=1.00%): {bpcer100}%, {bpcer100thres}\n"
-        f" BPCER1000(APCER=0.10%): {bpcer1000}%, {bpcer1000thres}\n"
-        f"BPCER10000(APCER=0.01%): {bpcer10000}%, {bpcer10000thres}\n"
     )
+    for val in bpcer_ap_all.keys():
+        f.write(f"   BPCER{val}(APCER={100/val}%): {bpcer_ap_all[val][0]}%, {bpcer_ap_all[val][1]}\n")
     f.close()
 
     # Create results plots
@@ -285,18 +282,18 @@ def eval_siamese_network(model_path, templates_path, test_path, n_templates, dis
     results['apcer_pais'] = str(apcer_)
     results['bpcer'] = bpcer_
     results['eer'] = eer_pais_[max_attack_pais][0]/100
-    results['bpcer10'] = bpcer10/100
-    results['bpcer20'] = bpcer20/100
-    results['bpcer100'] = bpcer100/100
+    results['bpcer10'] = bpcer_ap_all[10][0]/100
+    results['bpcer20'] = bpcer_ap_all[20][0]/100
+    results['bpcer100'] = bpcer_ap_all[100][0]/100
 
     test_feat = model.predict(dataset_test)
     plot_tsne(test_feat, test_labels, labels=display_labels, path_save=os.path.join(results_path, 'tsne_2d_test.jpg'))
 
-    cm = metrics.confusion_matrix(test_labels, few_shot_predictions)
-    disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
-    disp.plot()
-    plt.title('Confusion Matrix')
-    plt.savefig(os.path.join(results_path, 'conf_matrix.jpg'), dpi=150)
+    # cm = metrics.confusion_matrix(test_labels, few_shot_predictions)
+    # disp = metrics.ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
+    # disp.plot()
+    # plt.title('Confusion Matrix')
+    # plt.savefig(os.path.join(results_path, 'conf_matrix.jpg'), dpi=150)
     plt.close()
 
     tmp_dict = dict()

@@ -91,8 +91,8 @@ def main():
     random.seed(seed)
     tf.random.set_seed(seed)
 
-    model_path = '/home/dschulz/TOC/fakeid_2.0/releases/MEX-2021-12/models/fakeid_eval'
-    templates_path = None # '/home/dschulz/TOC/fakeid/datasets/segmented/arg1/train.txt'
+    model_path = '/home/dschulz/TOC/fakeid_2.0/releases/URY-2022-05/models/fakeid'
+    templates_path = '/home/dschulz/TOC/fakeid/datasets/segmented/uru/train.txt'
 
     if os.path.exists(os.path.join(model_path, 'params.json')):
         with open(os.path.join(model_path, 'params.json')) as f:
